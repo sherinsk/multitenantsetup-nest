@@ -6,9 +6,9 @@ services:
     container_name: phpmyadmin
     restart: always
     environment:
-      PMA_HOST: mysql-395fd7e0-sherinsk007-c0b5.b.aivencloud.com      # e.g., 123.45.67.89 or db.example.com
-      PMA_PORT: 26753                    # your MySQL port
-      PMA_USER: avnadmin
-      PMA_PASSWORD: AVNS_wJau0nHYGi_s2pTIUZy
+      PMA_HOST: ${HOST}     # e.g., 123.45.67.89 or db.example.com
+      PMA_PORT: ${PORT}                    # your MySQL port
+      PMA_USER: ${USER}
+      PMA_PASSWORD: ${PASSWORD}
     ports:
       - "8080:80"
