@@ -6,22 +6,9 @@ services:
     container_name: phpmyadmin
     restart: always
     environment:
-      PMA_HOST: ${HOST}    
-      PMA_PORT: ${PORT}                   
+      PMA_HOST: ${HOST}     
+      PMA_PORT: ${PORT}            
       PMA_USER: ${USER}
       PMA_PASSWORD: ${PASSWORD}
     ports:
       - "8080:80"
-
-  redis:
-    image: redis:latest
-    container_name: redis
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-
-
-volumes:
-  redis-data:
