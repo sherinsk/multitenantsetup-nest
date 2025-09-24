@@ -3,10 +3,11 @@ import knex, { Knex } from 'knex';
 import fs from 'fs';
 import path from 'path';
 
-
 @Injectable()
-export class DbConfigService implements  OnModuleDestroy {
-  private readonly adminConfig = {
+export class DbConfigService implements OnModuleDestroy {
+  private readonly masterDb = 'master';
+  private connections: Map<string, Knex> = new Map();
+  private adminConfig = {
     client: process.env.CLIENT,
     connection: {
       host: process.env.HOST,
@@ -17,52 +18,72 @@ export class DbConfigService implements  OnModuleDestroy {
     },
   };
 
-  private readonly masterDb = 'master';
-  private connections: Map<string, Knex> = new Map();
-
-  /**
-   * Runs at app bootstrap → ensure master DB exists
-   */
   async onModuleInit() {
     try {
-      console.log(`✅ Master DB "${this.masterDb}" is yet to create`);
       const knexAdmin = knex(this.adminConfig);
 
-      // Ensure master DB exists
-      await knexAdmin.raw(`CREATE DATABASE IF NOT EXISTS \`${this.masterDb}\``);
+      // 🔎 Check if master DB exists
+      const result = await knexAdmin.raw(
+        `SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?`,
+        [this.masterDb],
+      );
+
+      const dbExists = result[0].length > 0;
+      let masterKnex;
+
+      if (!dbExists) {
+        console.log(`✅ Welcome, Creating Master DB...`);
+
+        await knexAdmin.raw(`CREATE DATABASE \`${this.masterDb}\``);
+
+        const masterConfig = {
+          client: process.env.CLIENT,
+          connection: {
+            host: process.env.HOST,
+            user: process.env.USER,
+            password: process.env.PASSWORD,
+            port: Number(process.env.PORT),
+            database: this.masterDb,
+            multipleStatements: true,
+          },
+        };
+
+        masterKnex = knex(masterConfig);
+
+        const filePath = path.resolve('sqls/master/master.sql');
+        const schemaSQL = fs.readFileSync(filePath, 'utf-8');
+        await masterKnex.raw(schemaSQL);
+
+        console.log(`✅ Master DB "${this.masterDb}" created`);
+        console.log(`✅ Schema applied to "${this.masterDb}"`);
+      } else {
+        const masterConfig = {
+          client: process.env.CLIENT,
+          connection: {
+            host: process.env.HOST,
+            user: process.env.USER,
+            password: process.env.PASSWORD,
+            port: Number(process.env.PORT),
+            database: this.masterDb,
+            multipleStatements: true,
+          },
+        };
+
+        masterKnex = knex(masterConfig);
+        console.log(`✅ Hi, welcome back`);
+      }
 
       await knexAdmin.destroy();
 
-      // Open and keep connection for master DB
-      const masterKnex = knex({
-        client: process.env.CLIENT,
-        connection: {
-          host: process.env.HOST ,
-          user: process.env.USER ,
-          password: process.env.PASSWORD , // string
-          port: Number(process.env.PORT), // number
-          database: this.masterDb,
-          multipleStatements: true,
-        },
-      });
-
-
       this.connections.set(this.masterDb, masterKnex);
 
-      // ✅ Read SQL file
-      const filePath = path.resolve('sqls/master/master.sql');
-      const schemaSQL = fs.readFileSync(filePath, 'utf-8');
-
-      // Execute SQL
-      await masterKnex.raw(schemaSQL);
-
-      console.log(`✅ Master DB "${this.masterDb}" is ready`);
+      console.log(`✅ Connected to Master DB "${this.masterDb}"`);
     } catch (err) {
       console.error(
         `❌ Failed to initialize master DB "${this.masterDb}":`,
-        err.message,
+        err,
       );
-      throw err; // rethrow so Nest knows startup failed
+      throw err;
     }
   }
 
@@ -76,10 +97,19 @@ export class DbConfigService implements  OnModuleDestroy {
     }
 
     try {
-      const knexInstance = knex({
-        ...this.adminConfig,
-        connection: { ...this.adminConfig.connection, database: dbName },
-      });
+      const dbConfig = {
+        client: process.env.CLIENT,
+        connection: {
+          host: process.env.HOST,
+          user: process.env.USER,
+          password: process.env.PASSWORD,
+          port: Number(process.env.PORT),
+          database: dbName,
+          multipleStatements: true,
+        },
+      };
+
+      const knexInstance = knex(dbConfig);
 
       // Test connection (will throw if DB doesn’t exist)
       await knexInstance.raw('SELECT 1');
@@ -89,6 +119,55 @@ export class DbConfigService implements  OnModuleDestroy {
     } catch (err) {
       throw new Error(
         `❌ Cannot connect to database "${dbName}": ${err.message}`,
+      );
+    }
+  }
+
+  async createAndApplySchema(dbName) {
+    try {
+      const knexAdmin = knex(this.adminConfig);
+
+      // 🔎 Check if company DB exists
+      const result = await knexAdmin.raw(
+        `SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?`,
+        [dbName],
+      );
+
+      const dbExists = result[0].length > 0;
+
+      if (dbExists) {
+        return { message: `${dbName} already exists...` };
+      }
+
+      console.log(`✅ Welcome, Creating Company DB...`);
+
+      await knexAdmin.raw(`CREATE DATABASE \`${dbName}\``);
+
+      const companyConfig = {
+        client: process.env.CLIENT,
+        connection: {
+          host: process.env.HOST,
+          user: process.env.USER,
+          password: process.env.PASSWORD,
+          port: Number(process.env.PORT),
+          database: dbName,
+          multipleStatements: true,
+        },
+      };
+
+      let companyKnex = knex(companyConfig);
+
+      const filePath = path.resolve('sqls/company/company.sql');
+      const schemaSQL = fs.readFileSync(filePath, 'utf-8');
+      await companyKnex.raw(schemaSQL);
+
+      console.log(`✅ Company DB "${dbName}" created`);
+      console.log(`✅ Schema applied to "${dbName}"`);
+
+      return { message: `${dbName} created successfully...` };
+    } catch (error) {
+      throw new Error(
+        `❌ Cannot connect to database "${dbName}": ${error.message}`,
       );
     }
   }

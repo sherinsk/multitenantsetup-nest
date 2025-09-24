@@ -1,11 +1,19 @@
-import { Module } from '@nestjs/common';
-import { AuthModule } from './auth/auth.module';
-import { AuthController } from './auth/controllers/auth.controller';
+import { MiddlewareConsumer, Module, RequestMethod } from '@nestjs/common';
+import { AuthModule } from './modules/auth/auth.module';
 import { DbconfigModule } from '@app/dbconfig';
+import { AuthMiddleware } from './middlewares/auth.middleware';
 
 @Module({
   imports: [AuthModule, DbconfigModule],
   controllers: [],
   providers: [],
 })
-export class AppModule {}
+
+
+export class AppModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(AuthMiddleware)
+      .exclude({ path: 'auth/*', method: RequestMethod.ALL });
+  }
+}

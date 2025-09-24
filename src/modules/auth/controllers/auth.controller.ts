@@ -6,7 +6,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post()
-  create() {
-    return this.authService.create();
+  async create(@Body() body: any) {
+    return await this.authService.create(body);
   }
 }
